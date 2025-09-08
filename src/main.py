@@ -1,12 +1,9 @@
-import random
-import uuid
 
-from aiogram import Bot, Dispatcher, F, types
-from aiogram.filters import Command
+from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
+from aiogram.filters import Command
 from aiogram.types import (
-    Message, InlineQuery, InlineQueryResultArticle, InputTextMessageContent,
-    InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+    Message,
 )
 
 from src.core.config import BOT_TOKEN
@@ -45,7 +42,7 @@ async def cmd_profile(m: Message):
         f"<b>{user.name}</b>\n"
         f"STR <code>{user.STR}</code> AGI <code>{user.AGI}</code> INT <code>{user.INT}</code> HP <code>{user.HP}</code>\n"
         f"POINT <code>{user.POINT}</code>  FREE POINT <code>{user.FREE_POINT}</code>",
-        parse_mode=ParseMode.HTML
+        parse_mode=ParseMode.HTML,
     )
 
 
@@ -74,7 +71,7 @@ async def cmd_setstats(m: Message):
             user_name=user.name,
             s=s,
             a=a,
-            i=i
+            i=i,
         )
         if not result:
             await m.answer("❎ Не удалось обновить характеристики. Попробуй ещё раз.")
@@ -230,6 +227,7 @@ async def on_accept(cq: CallbackQuery, bot: Bot):
 async def main():
     bot = Bot(BOT_TOKEN)
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     import asyncio
