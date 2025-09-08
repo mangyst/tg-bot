@@ -10,7 +10,7 @@ from aiogram.types import (
 )
 
 from src.core.config import BOT_TOKEN
-from src.service.service import get_or_create_user_service, set_stats_service
+from src.service.service import get_or_create_user_service, set_stats_service, resset_stats_service, fight_with_log_service, add_stats_service
 
 
 dp = Dispatcher()
@@ -20,15 +20,16 @@ dp = Dispatcher()
 async def cmd_start(m: Message):
     user = await get_or_create_user_service(m.from_user.id, m.from_user.first_name)
     if not user:
-        await m.answer("Не удалось создать профиль. Попробуй ещё раз.")
+        await m.answer("❎ Не удалось создать профиль. Попробуй ещё раз.")
         return
     await m.answer(
         "Привет! Я inline-бот дуэлей.\n\n"
         "Напиши в любом чате: <code>@AdventureeeeBot</code> и отправь карточку.\n"
         "Любой может нажать «Принять вызов», и я сразу покажу результат боя.\n\n"
         "Можешь обновить статы через личку командами:\n"
-        "<code>/setstats STR AGI INT</code> — задать статы\n"
-        "<code>/profile</code> — мой профиль",
+        "<code>/setstats STR AGI INT</code> — задать характеристики\n"
+        "<code>/profile</code> — мой профиль\n"
+        "<code>/resetstats</code> - сбросить характеристики",
         parse_mode=ParseMode.HTML
     )
 
@@ -37,7 +38,7 @@ async def cmd_start(m: Message):
 async def cmd_profile(m: Message):
     user = await get_or_create_user_service(m.from_user.id, m.from_user.first_name)
     if not user:
-        await m.answer("Не удалось получить профиль. Попробуй ещё раз.")
+        await m.answer("❎ Не удалось получить профиль. Попробуй ещё раз.")
         return
 
     await m.answer(
@@ -76,7 +77,7 @@ async def cmd_setstats(m: Message):
             i=i
         )
         if not result:
-            await m.answer("Не удалось обновить stats. Попробуй ещё раз.")
+            await m.answer("❎ Не удалось обновить характеристики. Попробуй ещё раз.")
             return
 
         user = await get_or_create_user_service(m.from_user.id, m.from_user.first_name)
@@ -89,53 +90,52 @@ async def cmd_setstats(m: Message):
 
 #УШЕЛ В ТУАЛЕТ ЩА БУДУ
 
+@dp.message(Command("resetstats"))
+async def cmd_setstats(m: Message):
+    result = await resset_stats_service(user_id=m.from_user.id)
+    if result:
+        await m.reply("✅ Характеристики сброшены.", parse_mode=ParseMode.HTML)
+        return
+    await m.reply("❎ Не удалось сбросить характеристики.  Попробуй ещё раз.", parse_mode=ParseMode.HTML)
+    return
 
-'''
-# =========================
-# INLINE: "via @bot"
-# =========================
+
 @dp.inline_query()
 async def inline_duel(query: InlineQuery):
-    """
-    Пользователь пишет: @YourBot <текст>
-    Мы показываем карточку «Вызвать на дуэль».
-    В саму карточку кладём кнопку «Принять вызов».
-    В callback_data передаём id вызывающего (чтобы в момент принятия знать «кто вызвал»).
-    """
+    text = (query.query or "").strip().lower()
+    if text != "дуэль":
+        return
+
     challenger = query.from_user
-    get_or_create_user(challenger)  # чтобы были статы по умолчанию
+    challenger_user = await get_or_create_user_service(user_id=challenger.id, user_name=challenger.first_name)
+    if not challenger_user:
+        return
 
-    opponent_hint = (query.query or "").strip() or "кого-нибудь"
     result_id = str(uuid.uuid4())
+    message_text = f"⚔️ {challenger.full_name} бросил вызов чату!"
 
-    # Кнопка «Принять вызов» — нажимает любой желающий
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Принять вызов", callback_data=f"accept:{challenger.id}")]
-    ])
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Принять вызов", callback_data=f"accept:{challenger.id}")]
+        ]
+    )
 
-    msg_text = f"⚔️ {challenger.full_name} вызывает на дуэль *{opponent_hint}*!"
     item = InlineQueryResultArticle(
         id=result_id,
         title="Вызвать на дуэль",
-        description=f"Бросить вызов «{opponent_hint}»",
-        input_message_content=InputTextMessageContent(msg_text, parse_mode="Markdown"),
+        description="Отправить вызов чату",
+        input_message_content=InputTextMessageContent(
+            message_text=message_text,
+            parse_mode="Markdown"
+        ),
         reply_markup=kb
     )
 
-    # cache_time=1 — чтобы изменения placeholder сразу подтягивались
     await query.answer([item], cache_time=1, is_personal=False)
 
-# =========================
-# CALLBACK: принятие вызова
-# =========================
+
 @dp.callback_query(F.data.startswith("accept:"))
 async def on_accept(cq: CallbackQuery, bot: Bot):
-    """
-    Пользователь B жмёт «Принять вызов».
-    В data храним id инициатора (A). Сражаем A vs B.
-    Сообщение было отправлено в чат «via @YourBot», поэтому это inline-сообщение:
-    редактируем текст через inline_message_id.
-    """
     try:
         _, challenger_id_str = cq.data.split(":")
         challenger_id = int(challenger_id_str)
@@ -145,57 +145,88 @@ async def on_accept(cq: CallbackQuery, bot: Bot):
 
     # Инициатор дуэли (A)
     challenger_user = types.User(id=challenger_id, is_bot=False, first_name=f"user_{challenger_id}")
-    A = get_or_create_user(challenger_user)
+    challenger_user = await get_or_create_user_service(user_id=challenger_user.id, user_name=challenger_user.first_name)
 
     # Принявший дуэль (B) — тот, кто нажал кнопку
-    B = get_or_create_user(cq.from_user)
+    accept_user = await get_or_create_user_service(user_id=cq.from_user.id, user_name=cq.from_user.first_name)
+    if not accept_user:
+        await cq.answer("❎ Не удалось сбросить характеристики.  Попробуй ещё раз.", show_alert=True)
 
     # Запрещаем принимать свой же вызов
-    if A.user_id == B.user_id:
+    if challenger_user.user_id == accept_user.user_id:
         await cq.answer("Нельзя принять собственный вызов 😅", show_alert=True)
         return
 
     # Проводим бой
-    winner, battle = fight_with_log(A, B, rng=random)
-
-    # Формируем итоговый текст (сохраним «via @bot» — оно останется, мы просто редактируем)
-    result_text = (
-        f"⚔️ {A.name} вызвал на дуэль *кого-то*.\n\n"  # исходный заголовок можно переписать на свой вкус
-        + fmt_log(battle)
-    )
-
-    # Редактируем inline-сообщение.
-    # В callback из inline-сообщения TELEGRAM присылает inline_message_id.
-    if cq.inline_message_id:
-        try:
-            await bot.edit_message_text(
-                inline_message_id=cq.inline_message_id,
-                text=result_text,
-                parse_mode="Markdown"
-            )
-        except Exception:
-            # Если по каким-то причинам редактировать нельзя, просто ответим алертом.
-            await cq.answer("Не удалось отредактировать сообщение.", show_alert=True)
-            return
+    winner = fight_with_log_service(challenger_user, accept_user, rng=random)
+    if not winner:
+        result_text = (
+            f"⚔️ Исход боя ничья я в АХУЕ как так вышло"
+        )
+        if cq.inline_message_id:
+            try:
+                await bot.edit_message_text(
+                    inline_message_id=cq.inline_message_id,
+                    text=result_text,
+                    parse_mode="Markdown"
+                )
+            except Exception:
+                await cq.answer("❎ Не удалось отредактировать сообщение.", show_alert=True)
+                return
+        else:
+            try:
+                await bot.edit_message_text(
+                    chat_id=cq.message.chat.id,
+                    message_id=cq.message.message_id,
+                    text=result_text,
+                    parse_mode="Markdown"
+                )
+            except Exception:
+                await cq.answer("❎ Не удалось обновить сообщение.", show_alert=True)
+                return
     else:
-        # На случай, если кнопка пришла из обычного сообщения (редкий сценарий)
-        try:
-            await bot.edit_message_text(
-                chat_id=cq.message.chat.id,
-                message_id=cq.message.message_id,
-                text=result_text,
-                parse_mode="Markdown"
+        result_text = (
+            f"⚔️ {winner.name} победил"
+        )
+        result = await add_stats_service(winner.user_id)
+        if result:
+            if cq.inline_message_id:
+                try:
+                    await bot.edit_message_text(
+                        inline_message_id=cq.inline_message_id,
+                        text=result_text,
+                        parse_mode="Markdown"
+                    )
+                except Exception:
+                    await cq.answer("❎ Не удалось отредактировать сообщение.", show_alert=True)
+                    return
+            else:
+                try:
+                    await bot.edit_message_text(
+                        chat_id=cq.message.chat.id,
+                        message_id=cq.message.message_id,
+                        text=result_text,
+                        parse_mode="Markdown"
+                    )
+                except Exception:
+                    await cq.answer("❎ Не удалось обновить сообщение.", show_alert=True)
+                    return
+        else:
+            result_text = (
+                f"⚔️ {winner.name} победил\n"
+                f"но балы не получил"
             )
-        except Exception:
-            await cq.answer("Не удалось обновить сообщение.", show_alert=True)
-            return
+            try:
+                await bot.edit_message_text(
+                    inline_message_id=cq.inline_message_id,
+                    text=result_text,
+                    parse_mode="Markdown"
+                )
+            except Exception:
+                await cq.answer("❎ Не удалось отредактировать сообщение.", show_alert=True)
+                return
 
-    await cq.answer("Дуэль завершена!")
-'''
 
-# =========================
-# ЗАПУСК
-# =========================
 async def main():
     bot = Bot(BOT_TOKEN)
     await dp.start_polling(bot)

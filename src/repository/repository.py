@@ -16,6 +16,8 @@ class Database:
             class_=AsyncSession
         )
 
+# ОСУЖДАЮ ORM
+
     async def create_user(
             self,
             user_id: int,
@@ -83,7 +85,6 @@ class Database:
             strength = strength + :s,
             agility = agility + :a,
             intelligence = intelligence + :i,
-            point = 
             free_point = free_point - :summ_stats
             WHERE user_id = :user_id;
            """)
@@ -95,12 +96,50 @@ class Database:
                     'a': a,
                     'i': i,
                     'summ_stats': summ_stats
-
                 })
                 await session.commit()
                 return result.rowcount > 0
             except SQLAlchemyError as e:
+                await session.rollback()
                 return False
 
+    async def resset_stats(self, user_id: int) -> bool:
+        query = text("""
+            UPDATE users_bot
+            SET 
+            strength = 0,
+            agility = 0,
+            intelligence = 0,
+            free_point = point
+            WHERE user_id = :user_id;
+           """)
+        async with self.async_session() as session:
+            try:
+                result = await session.execute(query, {
+                    'user_id': user_id,
+                })
+                await session.commit()
+                return result.rowcount > 0
+            except SQLAlchemyError as e:
+                await session.rollback()
+                return False
 
-    #resetstats
+    async def add_stats(self, user_id: int, f_points: int) -> bool:
+        query = text("""
+            UPDATE users_bot
+            SET 
+            point = point + :f_point,
+            free_point = free_point + :f_point
+            WHERE user_id = :user_id;
+           """)
+        async with self.async_session() as session:
+            try:
+                result = await session.execute(query, {
+                    'user_id': user_id,
+                    'f_point': f_points
+                })
+                await session.commit()
+                return result.rowcount > 0
+            except SQLAlchemyError as e:
+                await session.rollback()
+                return False
