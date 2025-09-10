@@ -5,6 +5,10 @@ target-version = "py312"
 
 preview = true
 
+exclude = [
+    "scripts.py",
+]
+
 [format]
 docstring-code-format = true
 docstring-code-line-length = 70

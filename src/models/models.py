@@ -22,3 +22,5 @@ class Unit:
     HP: int = field(default=BASE_HP, init=False)  # базовое здоровье
     POINT: int = field(default=BASE_POINT)  # базовые поинты
     FREE_POINT: int = field(default=BASE_FREEPOINT)  # свободные поинты
+
+    '''Переименовать атрибуты на правильные названия'''

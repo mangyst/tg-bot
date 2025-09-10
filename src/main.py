@@ -1,3 +1,4 @@
+from itertools import zip_longest
 
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
@@ -7,43 +8,54 @@ from aiogram.types import (
 )
 
 from src.core.config import BOT_TOKEN
-from src.service.service import get_or_create_user_service, set_stats_service, resset_stats_service, fight_with_log_service, add_stats_service
-
+from src.repository.repository import AsyncSessionLocal
+from src.service.service import (
+    add_stats_service,
+    fight_with_log_service,
+    get_or_create_user_service,
+    resset_stats_service,
+    set_stats_service,
+)
 
 dp = Dispatcher()
 
 
 @dp.message(Command("start"))
 async def cmd_start(m: Message):
-    user = await get_or_create_user_service(m.from_user.id, m.from_user.first_name)
-    if not user:
-        await m.answer("❎ Не удалось создать профиль. Попробуй ещё раз.")
-        return
-    await m.answer(
-        "Привет! Я inline-бот дуэлей.\n\n"
-        "Напиши в любом чате: <code>@AdventureeeeBot</code> и отправь карточку.\n"
-        "Любой может нажать «Принять вызов», и я сразу покажу результат боя.\n\n"
-        "Можешь обновить статы через личку командами:\n"
-        "<code>/setstats STR AGI INT</code> — задать характеристики\n"
-        "<code>/profile</code> — мой профиль\n"
-        "<code>/resetstats</code> - сбросить характеристики",
-        parse_mode=ParseMode.HTML
-    )
+    """Обработчик команды /start."""
+    async with AsyncSessionLocal() as session:
+        user = await get_or_create_user_service(
+            m.from_user.id, m.from_user.first_name, session)  # type: ignore
+        if not user:
+            await m.answer("❎ Не удалось создать профиль. Попробуй ещё раз.")
+            return
+        await m.answer(
+            "Привет! Я inline-бот дуэлей.\n\n"
+            "Напиши в любом чате: <code>@AdventureeeeBot</code> и отправь карточку.\n"
+            "Любой может нажать «Принять вызов», и я сразу покажу результат боя.\n\n"
+            "Можешь обновить статы через личку командами:\n"
+            "<code>/setstats STR AGI INT</code> — задать характеристики\n"
+            "<code>/profile</code> — мой профиль\n"
+            "<code>/resetstats</code> - сбросить характеристики",
+            parse_mode=ParseMode.HTML,
+        )
 
 
 @dp.message(Command("profile"))
 async def cmd_profile(m: Message):
-    user = await get_or_create_user_service(m.from_user.id, m.from_user.first_name)
-    if not user:
-        await m.answer("❎ Не удалось получить профиль. Попробуй ещё раз.")
-        return
+    async with AsyncSessionLocal() as session:
+        user = await get_or_create_user_service(
+            m.from_user.id, m.from_user.first_name, session)  # type: ignore
+        if not user:
+            await m.answer("❎ Не удалось получить профиль. Попробуй ещё раз.")
+            return
 
-    await m.answer(
-        f"<b>{user.name}</b>\n"
-        f"STR <code>{user.STR}</code> AGI <code>{user.AGI}</code> INT <code>{user.INT}</code> HP <code>{user.HP}</code>\n"
-        f"POINT <code>{user.POINT}</code>  FREE POINT <code>{user.FREE_POINT}</code>",
-        parse_mode=ParseMode.HTML,
-    )
+        await m.answer(
+            f"<b>{user.name}</b>\n"
+            f"STR <code>{user.STR}</code> AGI <code>{user.AGI}</code> INT <code>{user.INT}</code> HP <code>{user.HP}</code>\n"
+            f"POINT <code>{user.POINT}</code>  FREE POINT <code>{user.FREE_POINT}</code>",
+            parse_mode=ParseMode.HTML,
+        )
 
 
 @dp.message(Command("setstats"))
@@ -56,22 +68,16 @@ async def cmd_setstats(m: Message):
         return
 
     try:
-        if len(list_stats) == 2:
-            s = int(list_stats[-1])
-            a = 0
-            i = 0
-        elif len(list_stats) == 3:
-            s, a = map(int, list_stats[1:])
-            i = 0
-        else:
-            s, a, i = map(int, list_stats[1:])
+        stats_kwargs = dict(zip_longest(
+            ('strength', 'agility', 'intelligence'),
+            [int(stat) for stat in list_stats[1:]],
+            fillvalue=0),
+        )
 
         result = await set_stats_service(
             user_id=user.user_id,
             user_name=user.name,
-            s=s,
-            a=a,
-            i=i,
+            **stats_kwargs,
         )
         if not result:
             await m.answer("❎ Не удалось обновить характеристики. Попробуй ещё раз.")
@@ -113,8 +119,8 @@ async def inline_duel(query: InlineQuery):
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Принять вызов", callback_data=f"accept:{challenger.id}")]
-        ]
+            [InlineKeyboardButton(text="✅ Принять вызов", callback_data=f"accept:{challenger.id}")],
+        ],
     )
 
     item = InlineQueryResultArticle(
@@ -123,9 +129,9 @@ async def inline_duel(query: InlineQuery):
         description="Отправить вызов чату",
         input_message_content=InputTextMessageContent(
             message_text=message_text,
-            parse_mode="Markdown"
+            parse_mode="Markdown",
         ),
-        reply_markup=kb
+        reply_markup=kb,
     )
 
     await query.answer([item], cache_time=1, is_personal=False)
@@ -158,14 +164,14 @@ async def on_accept(cq: CallbackQuery, bot: Bot):
     winner = fight_with_log_service(challenger_user, accept_user, rng=random)
     if not winner:
         result_text = (
-            f"⚔️ Исход боя ничья я в АХУЕ как так вышло"
+            "⚔️ Исход боя ничья я в АХУЕ как так вышло"
         )
         if cq.inline_message_id:
             try:
                 await bot.edit_message_text(
                     inline_message_id=cq.inline_message_id,
                     text=result_text,
-                    parse_mode="Markdown"
+                    parse_mode="Markdown",
                 )
             except Exception:
                 await cq.answer("❎ Не удалось отредактировать сообщение.", show_alert=True)
@@ -176,7 +182,7 @@ async def on_accept(cq: CallbackQuery, bot: Bot):
                     chat_id=cq.message.chat.id,
                     message_id=cq.message.message_id,
                     text=result_text,
-                    parse_mode="Markdown"
+                    parse_mode="Markdown",
                 )
             except Exception:
                 await cq.answer("❎ Не удалось обновить сообщение.", show_alert=True)
@@ -192,7 +198,7 @@ async def on_accept(cq: CallbackQuery, bot: Bot):
                     await bot.edit_message_text(
                         inline_message_id=cq.inline_message_id,
                         text=result_text,
-                        parse_mode="Markdown"
+                        parse_mode="Markdown",
                     )
                 except Exception:
                     await cq.answer("❎ Не удалось отредактировать сообщение.", show_alert=True)
@@ -203,7 +209,7 @@ async def on_accept(cq: CallbackQuery, bot: Bot):
                         chat_id=cq.message.chat.id,
                         message_id=cq.message.message_id,
                         text=result_text,
-                        parse_mode="Markdown"
+                        parse_mode="Markdown",
                     )
                 except Exception:
                     await cq.answer("❎ Не удалось обновить сообщение.", show_alert=True)
@@ -217,7 +223,7 @@ async def on_accept(cq: CallbackQuery, bot: Bot):
                 await bot.edit_message_text(
                     inline_message_id=cq.inline_message_id,
                     text=result_text,
-                    parse_mode="Markdown"
+                    parse_mode="Markdown",
                 )
             except Exception:
                 await cq.answer("❎ Не удалось отредактировать сообщение.", show_alert=True)

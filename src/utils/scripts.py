@@ -23,3 +23,23 @@ SET_STATS_SCRIPT = """
     free_point = free_point - :summ_stats
     WHERE user_id = :user_id;
     """
+
+# Скрипт сброса характеристик
+RESET_STATS_SCRIPT = """
+    UPDATE users_bot
+    SET
+    strength = 0,
+    agility = 0,
+    intelligence = 0,
+    free_point = point
+    WHERE user_id = :user_id;
+    """
+
+# Скрипт добавления характеристик
+ADD_STATS_SCRIPTS = """
+    UPDATE users_bot
+    SET
+    point = point + :f_point,
+    free_point = free_point + :f_point
+    WHERE user_id = :user_id;
+    """

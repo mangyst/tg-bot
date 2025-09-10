@@ -19,6 +19,7 @@ from src.utils.constants import (
     MINIMUM_DAMAGE,
     MIN_HIT_CHANGE,
 )
+from src.utils.exceptions import DeficitStatsError
 
 # =========================
 # МАППИНГ СТАТОВ (кратко)
@@ -29,12 +30,13 @@ from src.utils.constants import (
 
 
 def clamp_service(x, low, high) -> int:
-    """Ограничение x в диапазоне [lo, hi]."""
+    """Ограничение x в диапазоне [low, high]."""
     return max(low, min(high, x))
 
 
 def expected_damage_service(att: Unit, deff: Unit) -> Tuple[float, dict]:
-    """Возвращает ожидаемый урон одной атаки att → deff.
+    """Метод для рассчета урона.
+    Возвращает ожидаемый урон одной атаки att → deff.
     Как статы влияют:
     - AGI_att ↑, AGI_def ↓ → p_hit ↑ (ловкость повышает точность/уклонение)
     - INT_att ↑, INT_def ↓ → p_hit ↑ слегка (интеллект об «решениях»/прицеле)
@@ -77,7 +79,7 @@ def effective_hp_service(u: Unit):
     - AGI ↑ → повышает EHP через уклонение (каждая AGI даёт +2% EHP)
     - STR ↑ → повышает EHP через «толщину/стойкость» (каждая STR даёт +1% EHP)
     """
-    return u.HP * (1 + 0.02 * u.AGI + 0.01 * u.STR)
+    return u.HP * (1 + 0.02 * u.AGI + 0.01 * u.STR)  # добавить константы
 
 
 def fight_with_log_service(u1: Unit, u2: Unit, rng=random):
@@ -85,8 +87,8 @@ def fight_with_log_service(u1: Unit, u2: Unit, rng=random):
     Победитель — у кого выше «время жизни» (EHP),
     с учётом случайного фактора ±15% (апсет).
     """
-    dmg1, meta1 = expected_damage_service(u1, u2)  # урон u1 → u2
-    dmg2, meta2 = expected_damage_service(u2, u1)  # урон u2 → u1
+    dmg1 = expected_damage_service(u1, u2)  # урон u1 → u2
+    dmg2 = expected_damage_service(u2, u1)  # урон u2 → u1
 
     ehp1 = effective_hp_service(u1)  # Эффективное ХП первого юнита
     ehp2 = effective_hp_service(u2)  # Эффективное ХП второго юнита
@@ -96,8 +98,8 @@ def fight_with_log_service(u1: Unit, u2: Unit, rng=random):
     time2 = ehp2 / max(1e-9, dmg1)
 
     # Случайный аспект: ±15% к итоговой выживаемости
-    rnd1 = rng.uniform(0.85, 1.15)
-    rnd2 = rng.uniform(0.85, 1.15)
+    rnd1 = rng.uniform(0.85, 1.15)  # Вынести в константы
+    rnd2 = rng.uniform(0.85, 1.15)  # Вынести в константы
     time1_adj = time1 * rnd1
     time2_adj = time2 * rnd2
 
@@ -115,10 +117,11 @@ async def get_or_create_user_service(
     user_id: int,
     user_name: str,
     session: AsyncSession,
-) -> Unit | None | False:
+) -> Unit:
+    """Функция для получения пользователя (юнита).
+    При отсутствии пользователя в БД создается новый (базовый).
+    """
     user = await unit_crud.get_user(user_id, session=session)
-    if user is False:
-        return False
 
     if user is None:
         return await unit_crud.create_user(
@@ -129,15 +132,46 @@ async def get_or_create_user_service(
     return user
 
 
-"""async def set_stats_service(user_id: int, user_name: str, s: int = 0, a: int = 0, i: int = 0) -> bool:
-    user_id = int(user_id)
-    user_name = str(user_name)
-    user = await get_or_create_user_service(user_id=user_id, user_name=user_name)
+async def set_stats_service(
+    user_id: int,
+    user_name: str,
+    session: AsyncSession,
+    strength: int = 0,
+    agility: int = 0,
+    intelligence: int = 0,
+) -> Unit | None:
+    """Функция для установки характеристик."""
+    user = await unit_crud.get_user(user_id, session=session)
+
+    if user is None:
+        user = await unit_crud.create_user(
+            user_id, user_name=user_name, session=session)
+
     number_free = user.FREE_POINT
-    summ_stats = s + a + i
+    summ_stats = strength + agility + intelligence
+
     if summ_stats > number_free:
-        return False
-    result = await db.set_stats(user_id=user_id, s=s, a=a, i=i, summ_stats=summ_stats)
-    if result:
-        return True
-    return False"""
+        raise DeficitStatsError
+
+    return await unit_crud.set_stats(
+        user_id=user_id,
+        strength=strength,
+        agility=agility,
+        intelligence=intelligence,
+        session=session,
+    )  # Проверить если пользователь не вернулся
+
+
+async def resset_stats_service(  # reset с одной буквой s
+        user_id: int, session: AsyncSession) -> bool:
+    """Функция для сброса характеристик."""
+    result = await unit_crud.resset_stats(user_id=user_id, session=session)
+    return bool(result)
+
+
+async def add_stats_service(user_id: int, session: AsyncSession) -> bool:
+    """Функция для добавления характеристик."""
+    f_points = random.randint(0, 3)
+    result = await unit_crud.add_stats(
+        user_id=user_id, f_points=f_points, session=session)
+    return bool(result)
