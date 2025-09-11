@@ -99,41 +99,6 @@ def fight_with_log_service(u1, u2, rng=random) -> bool | Unit:
         winner = u2
     else:
         winner = False
-
-    # Подробный лог для дебага/баланса
-    '''
-    log = {
-        "u1": {
-            "name": u1["name"],
-            "STR": u1["STR"], "AGI": u1["AGI"], "INT": u1["INT"], "HP": u1["HP"],
-            "expected_dmg_vs_u2": dmg1,
-            "p_hit": meta1["p_hit"],
-            "base_dmg": meta1["base_dmg"],
-            "p_crit": meta1["p_crit"],
-            "crit_mult": meta1["crit_mult"],
-            "avg_mult": meta1["avg_mult"],
-            "EHP": ehp1,
-            "time_without_rng": time1,
-            "rng_factor": rnd1,
-            "time_with_rng": time1_adj,
-        },
-        "u2": {
-            "name": u2["name"],
-            "STR": u2["STR"], "AGI": u2["AGI"], "INT": u2["INT"], "HP": u2["HP"],
-            "expected_dmg_vs_u1": dmg2,
-            "p_hit": meta2["p_hit"],
-            "base_dmg": meta2["base_dmg"],
-            "p_crit": meta2["p_crit"],
-            "crit_mult": meta2["crit_mult"],
-            "avg_mult": meta2["avg_mult"],
-            "EHP": ehp2,
-            "time_without_rng": time2,
-            "rng_factor": rnd2,
-            "time_with_rng": time2_adj,
-        },
-        "winner": winner
-    }
-    '''
     return winner
 
 

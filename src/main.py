@@ -3,14 +3,15 @@ import uuid
 
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
-from aiogram.enums import ParseMode
 from aiogram.types import (
-    Message, InlineQuery, InlineQueryResultArticle, InputTextMessageContent,
-    InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+    Message, InlineQuery, InlineQueryResultCachedPhoto, InputMediaPhoto,
+    InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, BotCommand
 )
 
 from src.core.config import BOT_TOKEN
 from src.service.service import get_or_create_user_service, set_stats_service, resset_stats_service, fight_with_log_service, add_stats_service
+from src.utils.utils import make_profile_card, update_stats, start_challenger, get_winner
+from src.models.models import Messages
 
 
 dp = Dispatcher()
@@ -20,42 +21,35 @@ dp = Dispatcher()
 async def cmd_start(m: Message):
     user = await get_or_create_user_service(m.from_user.id, m.from_user.first_name)
     if not user:
-        await m.answer("❎ Не удалось создать профиль. Попробуй ещё раз.")
+        await m.answer(Messages.CREATE_ERROR.value)
         return
-    await m.answer(
-        "Привет! Я inline-бот дуэлей.\n\n"
-        "Напиши в любом чате: <code>@AdventureeeeBot</code> и отправь карточку.\n"
-        "Любой может нажать «Принять вызов», и я сразу покажу результат боя.\n\n"
-        "Можешь обновить статы через личку командами:\n"
-        "<code>/setstats STR AGI INT</code> — задать характеристики\n"
-        "<code>/profile</code> — мой профиль\n"
-        "<code>/resetstats</code> - сбросить характеристики",
-        parse_mode=ParseMode.HTML
-    )
+    await m.answer(Messages.SEND_HELLO.value)
+
+
+@dp.message(Command("info"))
+async def info(m: Message):
+    await m.answer(Messages.SEND_INFO.value)
 
 
 @dp.message(Command("profile"))
 async def cmd_profile(m: Message):
     user = await get_or_create_user_service(m.from_user.id, m.from_user.first_name)
     if not user:
-        await m.answer("❎ Не удалось получить профиль. Попробуй ещё раз.")
+        await m.answer(Messages.GET_ERROR.value)
         return
-
-    await m.answer(
-        f"<b>{user.name}</b>\n"
-        f"STR <code>{user.STR}</code> AGI <code>{user.AGI}</code> INT <code>{user.INT}</code> HP <code>{user.HP}</code>\n"
-        f"POINT <code>{user.POINT}</code>  FREE POINT <code>{user.FREE_POINT}</code>",
-        parse_mode=ParseMode.HTML
-    )
+    await m.answer(make_profile_card(user))
 
 
 @dp.message(Command("setstats"))
 async def cmd_setstats(m: Message):
     user = await get_or_create_user_service(m.from_user.id, m.from_user.first_name)
+    if not user:
+        await m.answer(Messages.GET_ERROR.value)
+        return
     list_stats = m.text.split()
 
     if len(list_stats) not in (2, 3, 4):
-        await m.reply("Использование: `/setstats STR AGI INT`", parse_mode=ParseMode.HTML)
+        await m.answer(Messages.HINT.value)
         return
 
     try:
@@ -76,58 +70,48 @@ async def cmd_setstats(m: Message):
             a=a,
             i=i
         )
+
         if not result:
-            await m.answer("❎ Не удалось обновить характеристики. Попробуй ещё раз.")
+            await m.answer(Messages.SET_ERROR.value)
             return
 
         user = await get_or_create_user_service(m.from_user.id, m.from_user.first_name)
-        await m.reply("✅ Обновлено.\n"
-                      f"*{user.name}* → STR <code>{user.STR}</code> AGI <code>{user.AGI}</code> INT <code>{user.INT}</code>",
-                      parse_mode=ParseMode.HTML)
+        await m.answer(update_stats(user))
     except ValueError:
-        await m.reply("Все значения должны быть целыми.", parse_mode=ParseMode.HTML)
-
-
+        await m.answer(Messages.WARNING.value)
 #УШЕЛ В ТУАЛЕТ ЩА БУДУ
+
 
 @dp.message(Command("resetstats"))
 async def cmd_setstats(m: Message):
     result = await resset_stats_service(user_id=m.from_user.id)
     if result:
-        await m.reply("✅ Характеристики сброшены.", parse_mode=ParseMode.HTML)
+        await m.answer(Messages.SUCCESSFUL.value)
         return
-    await m.reply("❎ Не удалось сбросить характеристики.  Попробуй ещё раз.", parse_mode=ParseMode.HTML)
+    await m.answer(Messages.RESET_ERROR.value)
     return
 
 
 @dp.inline_query()
 async def inline_duel(query: InlineQuery):
-    text = (query.query or "").strip().lower()
-    if text != "дуэль":
-        return
-
     challenger = query.from_user
     challenger_user = await get_or_create_user_service(user_id=challenger.id, user_name=challenger.first_name)
     if not challenger_user:
         return
 
     result_id = str(uuid.uuid4())
-    message_text = f"⚔️ {challenger.full_name} бросил вызов чату!"
+    message_text = start_challenger(challenger_user)
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Принять вызов", callback_data=f"accept:{challenger.id}")]
+            [InlineKeyboardButton(text="⚔️ Принять вызов", callback_data=f"accept:{challenger.id}")]
         ]
     )
 
-    item = InlineQueryResultArticle(
+    item = InlineQueryResultCachedPhoto(
         id=result_id,
-        title="Вызвать на дуэль",
-        description="Отправить вызов чату",
-        input_message_content=InputTextMessageContent(
-            message_text=message_text,
-            parse_mode="Markdown"
-        ),
+        photo_file_id="AgACAgIAAxkBAAIBiGjDI6l2NBpyj5RGzrYS0FTONyG7AAKR_TEbv_YZSk6EVmZhlkkRAQADAgADeQADNgQ",
+        caption=message_text,
         reply_markup=kb
     )
 
@@ -140,95 +124,89 @@ async def on_accept(cq: CallbackQuery, bot: Bot):
         _, challenger_id_str = cq.data.split(":")
         challenger_id = int(challenger_id_str)
     except Exception:
-        await cq.answer("Некорректные данные кнопки.", show_alert=True)
+        await cq.answer("❌ Некорректные данные кнопки.", show_alert=True)
         return
 
-    # Инициатор дуэли (A)
+    # Инициатор (A)
     challenger_user = types.User(id=challenger_id, is_bot=False, first_name=f"user_{challenger_id}")
-    challenger_user = await get_or_create_user_service(user_id=challenger_user.id, user_name=challenger_user.first_name)
+    challenger_user = await get_or_create_user_service(challenger_user.id, challenger_user.first_name)
 
-    # Принявший дуэль (B) — тот, кто нажал кнопку
-    accept_user = await get_or_create_user_service(user_id=cq.from_user.id, user_name=cq.from_user.first_name)
+    # Принявший (B)
+    accept_user = await get_or_create_user_service(cq.from_user.id, cq.from_user.first_name)
     if not accept_user:
-        await cq.answer("❎ Не удалось сбросить характеристики.  Попробуй ещё раз.", show_alert=True)
-
-    # Запрещаем принимать свой же вызов
-    if challenger_user.user_id == accept_user.user_id:
-        await cq.answer("Нельзя принять собственный вызов 😅", show_alert=True)
+        await cq.answer("❌ Не удалось создать профиль. Попробуй ещё раз.", show_alert=True)
         return
 
-    # Проводим бой
-    winner = fight_with_log_service(challenger_user, accept_user, rng=random)
+    if challenger_user.user_id == accept_user.user_id:
+        await cq.answer("❌ Нельзя принять собственный вызов 😅", show_alert=True)
+        return
+
+    # Бой
+    winner = fight_with_log_service(u1=challenger_user, u2=accept_user, rng=random)
+
     if not winner:
-        result_text = (
-            f"⚔️ Исход боя ничья я в АХУЕ как так вышло"
-        )
-        if cq.inline_message_id:
-            try:
-                await bot.edit_message_text(
-                    inline_message_id=cq.inline_message_id,
-                    text=result_text,
-                    parse_mode="Markdown"
-                )
-            except Exception:
-                await cq.answer("❎ Не удалось отредактировать сообщение.", show_alert=True)
-                return
-        else:
-            try:
-                await bot.edit_message_text(
-                    chat_id=cq.message.chat.id,
-                    message_id=cq.message.message_id,
-                    text=result_text,
-                    parse_mode="Markdown"
-                )
-            except Exception:
-                await cq.answer("❎ Не удалось обновить сообщение.", show_alert=True)
-                return
+        # НИЧЬЯ
+        media_file_id = 'AgACAgIAAxkBAAIBimjDI7RmGXszPiMsoCelYBknhFgYAAKT_TEbv_YZSsmSOiuRmoC9AQADAgADeQADNgQ'
+        caption = Messages.DRAW.value
     else:
-        result_text = (
-            f"⚔️ {winner.name} победил"
-        )
-        result = await add_stats_service(winner.user_id)
-        if result:
-            if cq.inline_message_id:
-                try:
-                    await bot.edit_message_text(
-                        inline_message_id=cq.inline_message_id,
-                        text=result_text,
-                        parse_mode="Markdown"
-                    )
-                except Exception:
-                    await cq.answer("❎ Не удалось отредактировать сообщение.", show_alert=True)
-                    return
-            else:
-                try:
-                    await bot.edit_message_text(
-                        chat_id=cq.message.chat.id,
-                        message_id=cq.message.message_id,
-                        text=result_text,
-                        parse_mode="Markdown"
-                    )
-                except Exception:
-                    await cq.answer("❎ Не удалось обновить сообщение.", show_alert=True)
-                    return
-        else:
-            result_text = (
-                f"⚔️ {winner.name} победил\n"
-                f"но балы не получил"
+        # ПОБЕДА
+        media_file_id = 'AgACAgIAAxkBAAIBimjDI7RmGXszPiMsoCelYBknhFgYAAKT_TEbv_YZSsmSOiuRmoC9AQADAgADeQADNgQ'
+        caption = get_winner(winner)
+        # Пробуем выдать награду
+        ok = await add_stats_service(winner.user_id)
+        if not ok:
+            caption += "\n\n⚠️ Очки не были начислены."
+
+    # Меняем media (картинку + подпись) тем же сообщением
+    media = InputMediaPhoto(media=media_file_id, caption=caption)
+
+    try:
+        if cq.inline_message_id:
+            # сообщение отправлено через inline (без chat_id)
+            await bot.edit_message_media(
+                inline_message_id=cq.inline_message_id,
+                media=media,
+                reply_markup=None  # можно убрать кнопки; или оставить свою
             )
-            try:
-                await bot.edit_message_text(
-                    inline_message_id=cq.inline_message_id,
-                    text=result_text,
-                    parse_mode="Markdown"
-                )
-            except Exception:
-                await cq.answer("❎ Не удалось отредактировать сообщение.", show_alert=True)
-                return
+        else:
+            # обычное сообщение в чате
+            await bot.edit_message_media(
+                chat_id=cq.message.chat.id,
+                message_id=cq.message.message_id,
+                media=media,
+                reply_markup=None
+            )
+    except Exception:
+        await cq.answer("❌ Не удалось изменить картинку.", show_alert=True)
+        return
+
+    await cq.answer()
+
+# отладочная
+'''
+@dp.message(F.photo)
+async def get_file_id(m: Message):
+    if m.from_user.id == 977102925:
+        file_id = m.photo[-1].file_id
+        await m.answer(f"📎 file_id: `{file_id}`")
+    return
+'''
+
+
+async def set_commands(bot: Bot):
+    commands = [
+        BotCommand(command="start", description="Запуск бота"),
+        BotCommand(command="info", description="Информация"),
+        BotCommand(command="profile", description="Мой профиль"),
+        BotCommand(command="setstats", description="Задать STR AGI INT"),
+        BotCommand(command="resetstats", description="Сбросить характеристики"),
+    ]
+    await bot.set_my_commands(commands)
 
 
 async def main():
     bot = Bot(BOT_TOKEN)
+    await set_commands(bot)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
