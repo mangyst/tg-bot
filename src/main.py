@@ -182,16 +182,6 @@ async def on_accept(cq: CallbackQuery, bot: Bot):
 
     await cq.answer()
 
-# отладочная
-'''
-@dp.message(F.photo)
-async def get_file_id(m: Message):
-    if m.from_user.id == 977102925:
-        file_id = m.photo[-1].file_id
-        await m.answer(f"📎 file_id: `{file_id}`")
-    return
-'''
-
 
 async def set_commands(bot: Bot):
     commands = [
