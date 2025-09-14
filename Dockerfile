@@ -10,4 +10,4 @@ RUN pip install --upgrade pip --disable-pip-version-check && \
 COPY src/ ./src
 
 
-CMD ["python main.py"]
+CMD ["python", "src/main.py"]

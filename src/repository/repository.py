@@ -16,13 +16,11 @@ class Database:
             class_=AsyncSession
         )
 
-# ОСУЖДАЮ ORM
 
     async def create_user(
             self,
             user_id: int,
             user_name: str,
-            hp: int,
             strength: int,
             agility: int,
             intelligence: int,
@@ -30,8 +28,8 @@ class Database:
             free_point: int
     ) -> bool:
         query = text("""
-            INSERT INTO users_bot (user_id, user_name, hp, strength, agility, intelligence, point, free_point)
-            VALUES (:user_id, :user_name, :hp, :strength, :agility, :intelligence, :point, :free_point)
+            INSERT INTO users_bot (user_id, user_name, strength, agility, intelligence, point, free_point)
+            VALUES (:user_id, :user_name, :strength, :agility, :intelligence, :point, :free_point)
             RETURNING user_id;
         """)
         async with self.async_session() as session:
@@ -39,7 +37,6 @@ class Database:
                 result = await session.execute(query, {
                     "user_id": user_id,
                     "user_name": user_name,
-                    "hp": hp,
                     "strength": strength,
                     "agility": agility,
                     "intelligence": intelligence,
@@ -58,12 +55,13 @@ class Database:
         SELECT 
             user_id,
             user_name,
-            hp,
             strength,
             agility,
             intelligence,
             point,
-            free_point
+            free_point,
+            lose,
+            win
             FROM users_bot
             WHERE user_id = :user_id;
            """)
@@ -137,6 +135,27 @@ class Database:
                 result = await session.execute(query, {
                     'user_id': user_id,
                     'f_point': f_points
+                })
+                await session.commit()
+                return result.rowcount > 0
+            except SQLAlchemyError as e:
+                await session.rollback()
+                return False
+
+    async def add_statistics(self, user_id: int, f_lose: int, f_win) -> bool:
+        query = text("""
+               UPDATE users_bot
+               SET 
+               lose = lose + :f_lose,
+               win = win + :f_win
+               WHERE user_id = :user_id;
+              """)
+        async with self.async_session() as session:
+            try:
+                result = await session.execute(query, {
+                    'f_lose': f_lose,
+                    'f_win': f_win,
+                    'user_id': user_id
                 })
                 await session.commit()
                 return result.rowcount > 0

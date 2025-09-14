@@ -16,7 +16,9 @@ def make_profile_card(user: Unit) -> str:
         f"🏹 AGI: {user.AGI}\n"
         f"🧠 INT: {user.INT}\n\n"
         f"📊 Points: {user.POINT}\n"
-        f"✨ Free Points: {user.FREE_POINT}"
+        f"✨ Free Points: {user.FREE_POINT}\n"
+        f"🏆 Wins: {user.WIN}\n"
+        f"💀 Losses: {user.LOSE}"
     )
 
 

@@ -1,4 +1,3 @@
-import random
 import uuid
 
 from aiogram import Bot, Dispatcher, F, types
@@ -9,7 +8,8 @@ from aiogram.types import (
 )
 
 from src.core.config import BOT_TOKEN
-from src.service.service import get_or_create_user_service, set_stats_service, resset_stats_service, fight_with_log_service, add_stats_service
+from src.service.service import (get_or_create_user_service, set_stats_service, resset_stats_service, add_stats_service,
+                                 compare_units_service, add_statistics_service)
 from src.utils.utils import make_profile_card, update_stats, start_challenger, get_winner
 from src.models.models import Messages
 
@@ -142,20 +142,31 @@ async def on_accept(cq: CallbackQuery, bot: Bot):
         return
 
     # Бой
-    winner = fight_with_log_service(u1=challenger_user, u2=accept_user, rng=random)
+    winner, loser, flag = compare_units_service(a=challenger_user, b=accept_user, clamp=5)
 
-    if not winner:
+    if not flag:
         # НИЧЬЯ
-        media_file_id = 'AgACAgIAAxkBAAIBimjDI7RmGXszPiMsoCelYBknhFgYAAKT_TEbv_YZSsmSOiuRmoC9AQADAgADeQADNgQ'
+        media_file_id = 'AgACAgIAAxkBAAIBjGjGy05SM9rdXmhOeLliOKZA4ie3AAIU-jEb4vc4StkgPmIHjlvNAQADAgADeQADNgQ'
         caption = Messages.DRAW.value
+        result_winner = await add_statistics_service(user_id=winner.user_id, lose=1)
+        result_loser = await add_statistics_service(user_id=loser.user_id, lose=1)
+        if not result_winner and not result_loser:
+            await cq.answer("❌ Не удалось сразиться. Попробуй ещё раз.", show_alert=True)
+            return
     else:
         # ПОБЕДА
         media_file_id = 'AgACAgIAAxkBAAIBimjDI7RmGXszPiMsoCelYBknhFgYAAKT_TEbv_YZSsmSOiuRmoC9AQADAgADeQADNgQ'
         caption = get_winner(winner)
         # Пробуем выдать награду
-        ok = await add_stats_service(winner.user_id)
+        ok, point = await add_stats_service(winner.user_id)
         if not ok:
-            caption += "\n\n⚠️ Очки не были начислены."
+            caption += "\n\n💀💀💀Очки не были начислены."
+        caption += f"\n\n✨Очки начислены: {point}"
+        result_winner = await add_statistics_service(user_id=winner.user_id, win=1)
+        result_loser = await add_statistics_service(user_id=loser.user_id, lose=1)
+        if not result_winner and not result_loser:
+            await cq.answer("❌ Не удалось сразиться. Попробуй ещё раз.", show_alert=True)
+            return
 
     # Меняем media (картинку + подпись) тем же сообщением
     media = InputMediaPhoto(media=media_file_id, caption=caption)
@@ -168,6 +179,7 @@ async def on_accept(cq: CallbackQuery, bot: Bot):
                 media=media,
                 reply_markup=None  # можно убрать кнопки; или оставить свою
             )
+
         else:
             # обычное сообщение в чате
             await bot.edit_message_media(
@@ -176,6 +188,7 @@ async def on_accept(cq: CallbackQuery, bot: Bot):
                 media=media,
                 reply_markup=None
             )
+
     except Exception:
         await cq.answer("❌ Не удалось изменить картинку.", show_alert=True)
         return
@@ -198,6 +211,7 @@ async def main():
     bot = Bot(BOT_TOKEN)
     await set_commands(bot)
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     import asyncio

@@ -1,0 +1,20 @@
+version: "3.9"
+
+services:
+  bot:
+    image: chatbot-tg:latest
+    container_name: chatbot-tg
+    restart: always
+    env_file:
+      - .env
+    healthcheck:
+      test: [ "CMD", "pgrep", "-f", "python src/main.py" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "25k"
+        max-file: "1"
+
