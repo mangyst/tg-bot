@@ -7,7 +7,7 @@ COPY requirements.txt .
 RUN pip install --upgrade pip --disable-pip-version-check && \
     pip install --no-cache-dir -r requirements.txt
 
-COPY src/ ./src
+COPY . .
 
 
-CMD ["python", "src/main.py"]
+CMD ["python", "-m", "src.main"]

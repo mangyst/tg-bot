@@ -14,3 +14,6 @@ DATABASE_PASSWORD = os.getenv('DATABASE_PASSWORD')
 
 # Токен bot
 BOT_TOKEN = os.getenv('BOT_TOKEN')
+
+# Admin
+ADMIN_ID = int(os.getenv('ADMIN_ID'))

@@ -4,10 +4,10 @@ from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
 from aiogram.types import (
     Message, InlineQuery, InlineQueryResultCachedPhoto, InputMediaPhoto,
-    InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, BotCommand
+    InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, BotCommand, FSInputFile
 )
 
-from src.core.config import BOT_TOKEN
+from src.core.config import BOT_TOKEN, ADMIN_ID
 from src.service.service import (get_or_create_user_service, set_stats_service, resset_stats_service, add_stats_service,
                                  compare_units_service, add_statistics_service)
 from src.utils.utils import make_profile_card, update_stats, start_challenger, get_winner
@@ -23,12 +23,16 @@ async def cmd_start(m: Message):
     if not user:
         await m.answer(Messages.CREATE_ERROR.value)
         return
-    await m.answer(Messages.SEND_HELLO.value)
+    photo = FSInputFile("./images/start.png")
+    caption = Messages.SEND_HELLO.value
+    await m.answer_photo(photo=photo, caption=caption)
 
 
 @dp.message(Command("info"))
 async def info(m: Message):
-    await m.answer(Messages.SEND_INFO.value)
+    photo = FSInputFile("./images/info.png")
+    caption = Messages.SEND_INFO.value
+    await m.answer_photo(photo=photo, caption=caption)
 
 
 @dp.message(Command("profile"))
@@ -37,10 +41,13 @@ async def cmd_profile(m: Message):
     if not user:
         await m.answer(Messages.GET_ERROR.value)
         return
-    await m.answer(make_profile_card(user))
+
+    photo = FSInputFile("./images/profile.png")
+    caption = make_profile_card(user)
+    await m.answer_photo(photo=photo, caption=caption)
 
 
-@dp.message(Command("setstats"))
+@dp.message(Command("set"))
 async def cmd_setstats(m: Message):
     user = await get_or_create_user_service(m.from_user.id, m.from_user.first_name)
     if not user:
@@ -76,20 +83,24 @@ async def cmd_setstats(m: Message):
             return
 
         user = await get_or_create_user_service(m.from_user.id, m.from_user.first_name)
-        await m.answer(update_stats(user))
+        photo = FSInputFile("./images/set.png")
+        caption = update_stats(user)
+        await m.answer_photo(photo=photo, caption=caption)
     except ValueError:
         await m.answer(Messages.WARNING.value)
+
 #УШЕЛ В ТУАЛЕТ ЩА БУДУ
 
 
-@dp.message(Command("resetstats"))
+@dp.message(Command("reset"))
 async def cmd_setstats(m: Message):
     result = await resset_stats_service(user_id=m.from_user.id)
     if result:
-        await m.answer(Messages.SUCCESSFUL.value)
+        photo = FSInputFile("./images/reset.png")
+        caption = Messages.SUCCESSFUL.value
+        await m.answer_photo(photo=photo, caption=caption)
         return
     await m.answer(Messages.RESET_ERROR.value)
-    return
 
 
 @dp.inline_query()
@@ -196,13 +207,21 @@ async def on_accept(cq: CallbackQuery, bot: Bot):
     await cq.answer()
 
 
+@dp.message(F.photo)
+async def get_file_id(m: Message):
+    if m.from_user.id == ADMIN_ID:
+        file_id = m.photo[-1].file_id
+        await m.answer(f"📎 file_id: `{file_id}`")
+    return
+
+
 async def set_commands(bot: Bot):
     commands = [
         BotCommand(command="start", description="Запуск бота"),
         BotCommand(command="info", description="Информация"),
         BotCommand(command="profile", description="Мой профиль"),
-        BotCommand(command="setstats", description="Задать STR AGI INT"),
-        BotCommand(command="resetstats", description="Сбросить характеристики"),
+        BotCommand(command="set", description="Задать STR AGI INT"),
+        BotCommand(command="reset", description="Сбросить характеристики"),
     ]
     await bot.set_my_commands(commands)
 
